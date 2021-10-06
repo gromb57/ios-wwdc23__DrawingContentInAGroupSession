@@ -17,7 +17,7 @@ class Canvas: ObservableObject {
     let strokeColor = Stroke.Color.random
 
     var subscriptions = Set<AnyCancellable>()
-    var tasks = Set<Task.Handle<Void, Never>>()
+    var tasks = Set<Task<Void, Never>>()
 
     func addPointToActiveStroke(_ point: CGPoint) {
         let stroke: Stroke
@@ -31,7 +31,7 @@ class Canvas: ObservableObject {
         stroke.points.append(point)
 
         if let messenger = messenger {
-            async {
+            Task {
                 try? await messenger.send(UpsertStrokeMessage(id: stroke.id, color: stroke.color, point: point))
             }
         }
@@ -70,7 +70,13 @@ class Canvas: ObservableObject {
     var messenger: GroupSessionMessenger?
 
     func startSharing() {
-        DrawTogether().activate()
+        Task {
+            do {
+                _ = try await DrawTogether().activate()
+            } catch {
+                print("Failed to activate DrawTogether activity: \(error)")
+            }
+        }
     }
 
     func configureGroupSession(_ groupSession: GroupSession<DrawTogether>) {
@@ -93,20 +99,20 @@ class Canvas: ObservableObject {
             .sink { activeParticipants in
                 let newParticipants = activeParticipants.subtracting(groupSession.activeParticipants)
 
-                async {
+                Task {
                     try? await messenger.send(CanvasMessage(strokes: self.strokes, pointCount: self.pointCount), to: .only(newParticipants))
                 }
             }
             .store(in: &subscriptions)
 
-        var task = async {
+        var task = Task {
             for await (message, _) in messenger.messages(of: UpsertStrokeMessage.self) {
                 handle(message)
             }
         }
         tasks.insert(task)
 
-        task = async {
+        task = Task {
             for await (message, _) in messenger.messages(of: CanvasMessage.self) {
                 handle(message)
             }

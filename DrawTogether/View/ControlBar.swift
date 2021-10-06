@@ -20,7 +20,7 @@ struct ControlBar: View {
                 } label: {
                     Image(systemName: "person.2.fill")
                 }
-                .controlProminence(.increased)
+                .buttonStyle(.borderedProminent)
             }
 
             Spacer()

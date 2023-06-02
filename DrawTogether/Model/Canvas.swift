@@ -1,8 +1,8 @@
 /*
-See LICENSE folder for this sample’s licensing information.
+See the LICENSE.txt file for this sample’s licensing information.
 
 Abstract:
-A model that represents the canvas on which to draw.
+A model that represents the canvas to draw on.
 */
 
 import Foundation
@@ -10,10 +10,18 @@ import Combine
 import SwiftUI
 import GroupActivities
 
+struct CanvasImage: Identifiable {
+    var id: UUID
+    let location: CGPoint
+    let imageData: Data
+}
+
 @MainActor
 class Canvas: ObservableObject {
     @Published var strokes = [Stroke]()
     @Published var activeStroke: Stroke?
+    @Published var images = [CanvasImage]()
+    @Published var selectedImageData: Data?
     let strokeColor = Stroke.Color.random
 
     var subscriptions = Set<AnyCancellable>()
@@ -46,12 +54,26 @@ class Canvas: ObservableObject {
         self.activeStroke = nil
     }
 
-    func reset() {
-        // Clear local drawing canvas.
-        strokes = []
+    func finishImagePlacement(location: CGPoint) {
+        guard let selectedImageData = selectedImageData, let journal = journal else {
+            return
+        }
 
-        // Teardown existing groupSession.
+        Task(priority: .userInitiated) {
+            try await journal.add(selectedImageData, metadata: ImageMetadataMessage(location: location))
+        }
+
+        self.selectedImageData = nil
+    }
+
+    func reset() {
+        // Clear the local drawing canvas.
+        strokes = []
+        images = []
+
+        // Tear down the existing groupSession.
         messenger = nil
+        journal = nil
         tasks.forEach { $0.cancel() }
         tasks = []
         subscriptions = []
@@ -68,6 +90,7 @@ class Canvas: ObservableObject {
 
     @Published var groupSession: GroupSession<DrawTogether>?
     var messenger: GroupSessionMessenger?
+    var journal: GroupSessionJournal?
 
     func startSharing() {
         Task {
@@ -85,6 +108,8 @@ class Canvas: ObservableObject {
         self.groupSession = groupSession
         let messenger = GroupSessionMessenger(session: groupSession)
         self.messenger = messenger
+        let journal = GroupSessionJournal(session: groupSession)
+        self.journal = journal
 
         groupSession.$state
             .sink { state in
@@ -119,6 +144,13 @@ class Canvas: ObservableObject {
         }
         tasks.insert(task)
 
+        task = Task {
+            for await images in journal.attachments {
+                await handle(images)
+            }
+        }
+        tasks.insert(task)
+
         groupSession.join()
     }
 
@@ -135,5 +167,30 @@ class Canvas: ObservableObject {
     func handle(_ message: CanvasMessage) {
         guard message.pointCount > self.pointCount else { return }
         self.strokes = message.strokes
+    }
+
+    func handle(_ attachments: GroupSessionJournal.Attachments.Element) async {
+        // Ensure that the canvas always has all the images from this sequence.
+        self.images = await withTaskGroup(of: CanvasImage?.self) { group in
+            var images = [CanvasImage]()
+
+            attachments.forEach { attachment in
+                group.addTask {
+                    do {
+                        let metadata = try await attachment.loadMetadata(of: ImageMetadataMessage.self)
+                        let imageData = try await attachment.load(Data.self)
+                        return .init(id: attachment.id, location: metadata.location, imageData: imageData)
+                    } catch { return nil }
+                }
+            }
+
+            for await image in group {
+                if let image {
+                    images.append(image)
+                }
+            }
+
+            return images
+        }
     }
 }

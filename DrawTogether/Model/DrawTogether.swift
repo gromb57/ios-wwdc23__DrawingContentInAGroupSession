@@ -1,8 +1,8 @@
 /*
-See LICENSE folder for this sample’s licensing information.
+See the LICENSE.txt file for this sample’s licensing information.
 
 Abstract:
-The activity in which users draw together.
+The activity that users use to draw together.
 */
 
 import Foundation

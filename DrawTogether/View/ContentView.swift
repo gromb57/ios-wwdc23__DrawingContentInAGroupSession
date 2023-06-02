@@ -1,5 +1,5 @@
 /*
-See LICENSE folder for this sample’s licensing information.
+See the LICENSE.txt file for this sample’s licensing information.
 
 Abstract:
 The primary entry point for the app's user interface.
@@ -19,7 +19,10 @@ struct ContentView: View {
             }
             .padding()
 
-            CanvasView(canvas: canvas)
+            ZStack {
+                CanvasView(canvas: canvas)
+                PhotoPlacementView(canvas: canvas)
+            }
 
             ControlBar(canvas: canvas)
                 .padding()

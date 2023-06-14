@@ -1,5 +1,7 @@
 # Drawing content in a group session
 
+[Source](https://developer.apple.com/documentation/groupactivities/drawing_content_in_a_group_session)
+
 Invite your friends to draw on a shared canvas while on a FaceTime call.
 
 ## Overview
